@@ -4,22 +4,23 @@ from pxr import Sdf, Usd
 import time
 
 def setup(db: og.Database):
-    state = db.internal_state
+    state = db.per_instance_state
     state.count = 1
     state.last_time = time.time()
     state.manager = omni.kit.app.get_app().get_extension_manager()
     state.extionsion_data_path = os.path.join(state.manager.get_extension_path_by_module("add_payloads"), "data")
+    state.box_path_list = []
 
 def cleanup(db: og.Database):
     pass
 
 def compute(db: og.Database):
-    state = db.internal_state
+    state = db.per_instance_state
     index = db.inputs.index
 
     if time.time() - state.last_time > 5:
         prim_path = f"/World/cardbox_{index}_{str(state.count).zfill(2)}"
-        # prim_path = f"/World/cardbox_{str(state.count).zfill(2)}"
+        state.box_path_list.append(prim_path)
 
         omni.kit.commands.execute('CreatePayload',
             usd_context=omni.usd.get_context(),

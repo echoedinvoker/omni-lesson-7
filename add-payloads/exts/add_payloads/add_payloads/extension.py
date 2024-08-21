@@ -146,20 +146,28 @@ class Add_payloadsExtension(omni.ext.IExt):
                                         {
                                             keys.CREATE_NODES: [
                                                 ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
-                                                ("script_node", "omni.graph.scriptnode.ScriptNode")
+                                                ("script_node", "omni.graph.scriptnode.ScriptNode"),
+                                                ("on_stage_event", "omni.graph.action.OnStageEvent"),
+                                                ("delete_box_node", "omni.graph.scriptnode.ScriptNode")
                                             ],
                                             keys.CREATE_ATTRIBUTES: [
                                                 ("script_node.inputs:location", "pointd[3]"),
-                                                ("script_node.inputs:index", "int")
+                                                ("script_node.inputs:index", "int"),
+                                                ("delete_box_node.inputs:graph_path", "string")
                                             ],
                                             keys.SET_VALUES: [
                                                 ("script_node.inputs:usePath", True),
                                                 ("script_node.inputs:scriptPath", os.path.join(extension_data_path, "createbox.py")),
                                                 ("script_node.inputs:location", (x, y, z)),
                                                 ("script_node.inputs:index", count),
+                                                ("on_stage_event.inputs:eventName", "Simulation Stop Play"),
+                                                ("delete_box_node.inputs:usePath", True),
+                                                ("delete_box_node.inputs:scriptPath", os.path.join(extension_data_path, "delete_box.py")),
+                                                ("delete_box_node.inputs:graph_path", f"/action_graph_{count}")
                                             ],
                                             keys.CONNECT: [
-                                                ("on_playback_tick.outputs:tick", "script_node.inputs:execIn")
+                                                ("on_playback_tick.outputs:tick", "script_node.inputs:execIn"),
+                                                ("on_stage_event.outputs:execOut", "delete_box_node.inputs:execIn")
                                             ]
                                         }
                                     )
