@@ -1,52 +1,44 @@
-import socket
-import threading
+from paho.mqtt import client as mqtt_client
 
-def start_server_socket(host, port, db):
-    state = db.per_instance_state
+def start_mqtt_client(host, port, db):
+    def on_message(client, userdata, message):
+        payload = message.payload.decode()
+        if payload == "stop_conveyor":
+            db.per_instance_state.stop_conveyor_flag = True
+        elif payload == "activate_conveyor":
+            db.per_instance_state.activate_conveyor_flag = True
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((host, port))
-    server_socket.listen(1)
-    server_socket.settimeout(1)
-
-    while state.socket_flag:
-        try:
-            conn, addr = server_socket.accept()
-        except socket.timeout:
-            continue
-        recv_data = conn.recv(1024)
-        recv_data = recv_data.decode('utf-8')
-        print(f"Received data: {recv_data}")
-
-        if recv_data == "stop_conveyor":
-            state.stop_conveyor_flag = True
-        elif recv_data == "activate_conveyor":
-            state.activate_conveyor_flag = True
-
-        conn.send(recv_data.encode())
-        conn.close()
+    client = mqtt_client.Client()
+    client.on_message = on_message
+    client.connect(host, port)
+    client.subscribe("conveyor/commands")
+    client.loop_start()
+    return client
 
 def setup(db: og.Database):
     state = db.per_instance_state
 
-    state.host = "0.0.0.0"
-    state.port = 3000
-    state.socket_flag = False
-    state.server_socket_thread = None
+    state.mqtt_flag = False
+    state.mqtt_client = None
     
     state.stop_conveyor_flag = False
     state.activate_conveyor_flag = False
 
+    # Initialize MQTT client
+    state.mqtt_host = '127.0.0.1'  # Set your MQTT broker host
+    state.mqtt_port = 1883  # Set your MQTT broker port
+
 def cleanup(db: og.Database):
-    pass
+    if db.per_instance_state.mqtt_client:
+        db.per_instance_state.mqtt_client.loop_stop()
+        db.per_instance_state.mqtt_client.disconnect()
 
 def compute(db: og.Database):
     state = db.per_instance_state
 
-    if state.socket_flag == False:
-        state.socket_flag = True
-        state.server_socket_thread = threading.Thread(target=start_server_socket, args=(state.host, state.port, db))
-        state.server_socket_thread.start()
+    if not state.mqtt_flag:
+        state.mqtt_flag = True
+        state.mqtt_client = start_mqtt_client(state.mqtt_host, state.mqtt_port, db)
 
     if state.stop_conveyor_flag:
         db.outputs.is_stop = True
