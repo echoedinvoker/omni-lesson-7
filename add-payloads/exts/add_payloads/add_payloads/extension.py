@@ -7,6 +7,7 @@ import cv2
 import omni.kit.commands
 from pxr import UsdGeom, Sdf
 import omni.graph.core as og
+import shutil
 
 
 # Functions and vars are available to other extension as usual in python: `example.python_ext.some_public_function(x)`
@@ -43,6 +44,15 @@ class Add_payloadsExtension(omni.ext.IExt):
                     UsdGeom.SetStageMetersPerUnit(stage, 0.01)
                     stage_w, stage_h = image.shape[1], image.shape[0]
 
+                    # Create result images directory
+                    dir_name = os.path.dirname(string_model.as_string)
+                    result_images_dir = os.path.join(dir_name, "result_images")
+                    if os.path.exists(result_images_dir):
+                        shutil.rmtree(result_images_dir)
+                    os.mkdir(result_images_dir)
+                    os.mkdir(os.path.join(result_images_dir, "normal_images"))
+                    os.mkdir(os.path.join(result_images_dir, "defect_images"))
+
                     # Create dome light
                     omni.kit.commands.execute('CreatePrim',
                         prim_type='DomeLight',
@@ -54,16 +64,6 @@ class Add_payloadsExtension(omni.ext.IExt):
                         path_to='/World/gray_ground',
                         asset_path=os.path.join(extension_data_path, 'gray_ground.usd'),
                         instanceable=False)
-
-                    # Create ground plane
-                    omni.kit.commands.execute('CreatePayload',
-                        usd_context=omni.usd.get_context(),
-                        path_to='/World/cardbox',
-                        asset_path=os.path.join(extension_data_path, 'cardbox.usd'),
-                        instanceable=False)
-                    omni.kit.commands.execute('DeletePrims',
-                        paths=['/World/cardbox'],
-                        destructive=False)
 
                     # Scale and move ground plane
                     omni.kit.commands.execute('TransformMultiPrimsSRTCpp',
@@ -79,6 +79,41 @@ class Add_payloadsExtension(omni.ext.IExt):
                         old_scales=[1.0, 1.0, 1.0],
                         usd_context_name='',
                         time_code=0.0)
+
+                    graph_path = f"/control_center_graph"
+                    keys = og.Controller.Keys
+                    (graph_handle, list_of_nodes, _, _) = og.Controller.edit(
+                        {"graph_path": graph_path, "evaluator_name": "execution"},
+                        {
+                            keys.CREATE_NODES: [
+                                ("on_playback_tick", "omni.graph.action.OnPlaybackTick"),
+                                ("script_node", "omni.graph.scriptnode.ScriptNode"),
+                                ("stop_branch_node", "omni.graph.action.Branch"),
+                                ("activate_branch_node", "omni.graph.action.Branch"),
+                                ("send_stop_event_node", "omni.graph.action.SendCustomEvent"),
+                                ("send_activate_event_node", "omni.graph.action.SendCustomEvent"),
+                            ],
+                            keys.CREATE_ATTRIBUTES: [
+                                ("script_node.outputs:is_stop", "bool"),
+                                ("script_node.outputs:is_activate", "bool"),
+                            ],
+                            keys.SET_VALUES: [
+                                ("script_node.inputs:usePath", True),
+                                ("script_node.inputs:scriptPath", os.path.join(extension_data_path, "control_center.py")),
+                                ("send_stop_event_node.inputs:eventName", "stop_conveyor"),
+                                ("send_activate_event_node.inputs:eventName", "activate_conveyor")
+                            ],
+                            keys.CONNECT: [
+                                ("on_playback_tick.outputs:tick", "script_node.inputs:execIn"),
+                                ("script_node.outputs:execOut", "stop_branch_node.inputs:execIn"),
+                                ("script_node.outputs:execOut", "activate_branch_node.inputs:execIn"),
+                                ("script_node.outputs:is_stop", "stop_branch_node.inputs:condition"),
+                                ("script_node.outputs:is_activate", "activate_branch_node.inputs:condition"),
+                                ("stop_branch_node.outputs:execTrue", "send_stop_event_node.inputs:execIn"),
+                                ("activate_branch_node.outputs:execTrue", "send_activate_event_node.inputs:execIn"),
+                            ]
+                        }
+                    )
 
                     # Create all components
                     template_image_dir = os.path.join(extension_data_path, 'template_image')
@@ -135,9 +170,6 @@ class Add_payloadsExtension(omni.ext.IExt):
                                     usd_context_name='',
                                     time_code=0.0)
 
-                                processed_point_list.append(target_point)
-                                count += 1
-
                                 if image_name[:-4] == 'conveyor_start':
                                     keys = og.Controller.Keys
                                     print('tst')
@@ -171,6 +203,21 @@ class Add_payloadsExtension(omni.ext.IExt):
                                             ]
                                         }
                                     )
+                                elif image_name[:-4] == 'conveyor_end':
+                                    script_path_property = f"{prim_path}/ConveyorTrack/DefectDetectionGraph/script_node.inputs:scriptPath"
+                                    omni.kit.commands.execute('ChangeProperty',
+                                        prop_path=Sdf.Path(script_path_property),
+                                        value=os.path.join(extension_data_path, 'defect_detection.py'),
+                                        prev='')
+                                    
+                                    result_images_dir_property = f"{prim_path}/ConveyorTrack/DefectDetectionGraph/script_node.inputs:result_images_dir"
+                                    omni.kit.commands.execute('ChangeProperty',
+                                        prop_path=Sdf.Path(result_images_dir_property),
+                                        value=result_images_dir,
+                                        prev='')
+
+                                processed_point_list.append(target_point)
+                                count += 1
 
 
 

@@ -1,3 +1,4 @@
+from numpy import random
 import omni.kit.commands
 import os
 from pxr import Sdf, Usd
@@ -10,6 +11,7 @@ def setup(db: og.Database):
     state.manager = omni.kit.app.get_app().get_extension_manager()
     state.extionsion_data_path = os.path.join(state.manager.get_extension_path_by_module("add_payloads"), "data")
     state.box_path_list = []
+    state.asset_path_list = ['cardbox.usd', 'defective_cardbox.usd']
 
 def cleanup(db: og.Database):
     pass
@@ -22,10 +24,13 @@ def compute(db: og.Database):
         prim_path = f"/World/cardbox_{index}_{str(state.count).zfill(2)}"
         state.box_path_list.append(prim_path)
 
+        asset_path = os.path.join(state.extionsion_data_path, random.choice(state.asset_path_list))
+
         omni.kit.commands.execute('CreatePayload',
             usd_context=omni.usd.get_context(),
             path_to=prim_path,
-            asset_path=os.path.join(state.extionsion_data_path, "cardbox.usd"),
+            # asset_path=os.path.join(state.extionsion_data_path, "cardbox.usd"),
+            asset_path=asset_path,
             instanceable=False)
 
         x = db.inputs.location[0]
